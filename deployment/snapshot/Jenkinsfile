@@ -11,6 +11,9 @@ pipeline {
         majorBuild = "0"
         minorBuild = "5"
         buildVersion = "$majorBuild.$minorBuild.${BUILD_NUMBER}"
+        sshInfo = "dsladm@10.212.233.40"
+        pathApp = "/home/dsladm/scripts/jenkins/mid/demo-log4jshell"
+        buildEnv = "snapshot"
     }
     agent any
     stages {
@@ -63,10 +66,14 @@ pipeline {
                     sh "sed -i 's|jenkins-port|$port|g' $WORKSPACE/deployment/resources/service.yaml"
                     sh "sed -i 's|jenkins-node-port|$nodePort|g' $WORKSPACE/deployment/resources/service.yaml"
                     sh '''
-                    kubectl apply -f $WORKSPACE/deployment/resources/namespace.yaml
-                    kubectl apply -f $WORKSPACE/deployment/snapshot/config-map.yaml
-                    kubectl apply -f $WORKSPACE/deployment/resources/deployment.yaml
-                    kubectl apply -f $WORKSPACE/deployment/resources/service.yaml
+                        ssh -o StrictHostKeyChecking=no $sshInfo mkdir -p $pathApp
+                        scp $WORKSPACE/deployment/resources/* $sshInfo:$pathApp
+                        scp $WORKSPACE/deployment/$buildEnv/config-map.yaml $sshInfo:$pathApp
+                        ssh -o StrictHostKeyChecking=no $sshInfo uname -a
+                        ssh -o StrictHostKeyChecking=no $sshInfo /usr/bin/kubectl apply -f $pathApp/namespace.yaml
+                        ssh -o StrictHostKeyChecking=no $sshInfo /usr/bin/kubectl apply -f $pathApp/config-map.yaml
+                        ssh -o StrictHostKeyChecking=no $sshInfo /usr/bin/kubectl apply -f $pathApp/deployment.yaml
+                        ssh -o StrictHostKeyChecking=no $sshInfo /usr/bin/kubectl apply -f $pathApp/service.yaml
                     '''
                 }
            	}
