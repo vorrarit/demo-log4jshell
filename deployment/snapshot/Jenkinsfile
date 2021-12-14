@@ -50,11 +50,8 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                withKubeConfig([credentialsId: "${KUBE_CREDENTIAL}",
-                                serverUrl: "${KUBE_API}",
-                                contextName: "${KUBE_CONTEXT}",
-                                clusterName: "${KUBE_CLUSTER}"
-                                ]) {
+                sshagent (credentials: ['dev-ssh-key-kube'])
+                {
                     sh "sed -i 's|jenkins-namespace|$namespace|g' $WORKSPACE/deployment/resources/namespace.yaml"
                     sh "sed -i 's|jenkins-namespace|$namespace|g' $WORKSPACE/deployment/resources/deployment.yaml"
                     sh "sed -i 's|jenkins-deployment|$deployment|g' $WORKSPACE/deployment/resources/deployment.yaml"
