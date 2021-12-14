@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: jenkins-deployment
+  name: jenkins-deployment
+  namespace: jenkins-namespace
+  annotations:
+    container.apparmor.security.beta.kubernetes.io/jenkins-deployment: runtime/default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jenkins-deployment
+  template:
+    metadata:
+      labels:
+        app: jenkins-deployment
+    spec:
+      containers:
+        - env:
+            - name: JAVA_OPTS
+              value: -Xms512m -Xmx1024m -Djava.security.egd=file:/dev/./urandom
+            - name: TIME_ZONE
+              value: -Dlogback.timezone=Asia/Bangkok
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: status.hostIP
+          image: image-container
+          name: jenkins-deployment
+          volumeMounts:
+            - mountPath: /home/
+              name: jenkins-deployment-volume
+          readinessProbe:
+            httpGet:
+              path: /dsl-simple-backend/actuator/health
+              port: jenkins-port
+            initialDelaySeconds: 10
+            timeoutSeconds: 30
+            periodSeconds: 60
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /dsl-simple-backend/actuator/health
+              port: jenkins-port
+            initialDelaySeconds: 30
+            timeoutSeconds: 30
+            periodSeconds: 60
+            failureThreshold: 1
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          imagePullPolicy: Always
+          securityContext:
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - all
+      volumes:
+        - configMap:
+            defaultMode: 420
+            name: jenkins-deployment-config
+          name: jenkins-deployment-volume

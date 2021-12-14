@@ -1,0 +1,36 @@
+apiVersion: v1
+data:
+  application.properties: |
+    spring.datasource.url=jdbc:oracle:thin:@exadev-scan.dev.dsl:1535:DSLCORD
+    spring.datasource.username=dsladm
+    spring.datasource.password=DSLADM#2019
+    spring.datasource.driver-class-name=oracle.jdbc.driver.OracleDriver
+    spring.datasource.hikari.maximum-pool-size=20
+    spring.datasource.hikari.minimum-idle=2
+    spring.datasource.hikari.leak-detection-threshold=0
+
+    management.endpoints.web.exposure.include=*
+    management.endpoint.health.show-details=always
+    spring.mvc.date-format=dd/MM/yyyy HH:mm:ss
+    server.port=9006
+
+    logging.level.org.springframework.security: DEBUG
+    spring.mvc.servlet.load-on-startup=1
+    baseUrl=http://localhost:${server.port}/
+    server.servlet.context-path=/person-service
+
+    emailBaseUrl=http://dms-api-mail.email.svc.cluster.local:8080/
+    
+    #Redis
+    redis.env=
+    spring.redis.cluster.nodes=10.212.233.16:6379,10.212.233.16:6380,10.212.233.16:6381
+    spring.redis.cluster.password=
+    spring.redis.cluster.max-redirects=12
+    spring.cache.type=redis
+    #24*60*1000
+    spring.cache.redis.time-to-live=1440000
+
+kind: ConfigMap
+metadata:
+  name: person-service-config
+  namespace: dms

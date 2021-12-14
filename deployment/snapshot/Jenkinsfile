@@ -1,0 +1,78 @@
+pipeline {
+    environment {
+        jar = "demo-log4jshell-0.0.1-SNAPSHOT.jar"
+        registry = "${DEFAULT_REGISTRY}"
+        imageName = "snapshot/demo-log4jshell"
+        namespace = "vorrarit"
+        deployment = "demo-log4jshell"
+        service = "demo-log4jshell-service"
+        nodePort = "31301"
+        port = "8080"
+        majorBuild = "0"
+        minorBuild = "5"
+        buildVersion = "$majorBuild.$minorBuild.${BUILD_NUMBER}"
+    }
+    agent any
+    stages {
+        stage('Build with Maven') {
+            agent {
+                docker {
+                    image 'maven:3-jdk-11-slim'
+                    args "-v ${MVN_SOURCE_VOLUME}:/root/.m2"
+                    reuseNode true
+                }
+            }
+
+            steps {
+                sh '''
+                    echo "PATH = ${PATH}"
+                    echo "M2_HOME = ${M2_HOME}"
+
+                    pwd
+                    mvn clean
+                    mvn install -X -Dmaven.test.skip=true
+					
+                 '''
+                 stash includes: "target/${env.jar}", name: 'targetfiles'
+            }
+        }
+
+        stage('Build Image') {
+            steps {
+                script {
+                    unstash 'targetfiles'
+                    sh "sed -i 's|jenkins-jar|${env.jar}|g' $WORKSPACE/deployment/resources/Dockerfile"
+                    a = docker.build("${env.registry}" + "/" + "${env.imageName}" + ":"+"${env.buildVersion}", "-f deployment/resources/Dockerfile .")
+                    a.push()
+                }
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                withKubeConfig([credentialsId: "${KUBE_CREDENTIAL}",
+                                serverUrl: "${KUBE_API}",
+                                contextName: "${KUBE_CONTEXT}",
+                                clusterName: "${KUBE_CLUSTER}"
+                                ]) {
+                    sh "sed -i 's|jenkins-namespace|$namespace|g' $WORKSPACE/deployment/resources/namespace.yaml"
+                    sh "sed -i 's|jenkins-namespace|$namespace|g' $WORKSPACE/deployment/resources/deployment.yaml"
+                    sh "sed -i 's|jenkins-deployment|$deployment|g' $WORKSPACE/deployment/resources/deployment.yaml"
+                    sh "sed -i 's|jenkins-port|$port|g' $WORKSPACE/deployment/resources/deployment.yaml"
+                    sh "sed -i 's|image-container|$registry/$imageName:$buildVersion|g' $WORKSPACE/deployment/resources/deployment.yaml"
+                    sh "sed -i 's|jenkins-namespace|$namespace|g' $WORKSPACE/deployment/resources/service.yaml"
+                    sh "sed -i 's|jenkins-deployment|$deployment|g' $WORKSPACE/deployment/resources/service.yaml"
+                    sh "sed -i 's|jenkins-service|$service|g' $WORKSPACE/deployment/resources/service.yaml"
+                    sh "sed -i 's|jenkins-port|$port|g' $WORKSPACE/deployment/resources/service.yaml"
+                    sh "sed -i 's|jenkins-node-port|$nodePort|g' $WORKSPACE/deployment/resources/service.yaml"
+                    sh '''
+                    kubectl apply -f $WORKSPACE/deployment/resources/namespace.yaml
+                    kubectl apply -f $WORKSPACE/deployment/snapshot/config-map.yaml
+                    kubectl apply -f $WORKSPACE/deployment/resources/deployment.yaml
+                    kubectl apply -f $WORKSPACE/deployment/resources/service.yaml
+                    '''
+                }
+           	}
+        }
+    }
+}

@@ -1,0 +1,97 @@
+pipeline {
+    environment {
+        jar = "person-service-0.0.1-SNAPSHOT.jar"
+        registry = "registry91.dev.dsl:5000"
+        imageName = "dms/person-service"
+        namespace = "dms"
+        deployment = "person-service"
+        service = "person-service"
+        nodePort = "30017"
+        port = "9006"
+        majorBuild = "0"
+        minorBuild = "5"
+        buildVersion = "$majorBuild.$minorBuild.${BUILD_NUMBER}"
+        sshInfo = "dsladm@10.212.233.140"
+        pathApp = "/home/dsladm/scripts/jenkins/dms/person-service"
+        buildEnv = "release"
+        subProjectPath = "person-service"
+    }
+    agent any
+    stages {
+        stage('Build with Maven') {
+            agent {
+                docker {
+                    image 'maven:3-alpine'
+                    args '-v /data/mvn/.m2:/root/.m2'
+                    reuseNode true
+                }
+            }
+
+            steps {
+                sh '''
+                    echo "PATH = ${PATH}"
+                    echo "M2_HOME = ${M2_HOME}"
+
+                    cd share-lib
+                    mvn clean
+                    mvn install -X -Dmaven.test.skip=true
+                    mvn install:install-file -Dfile=target/share-lib-0.0.1-SNAPSHOT.jar -DgroupId=com.dsl.dms -DartifactId=share-lib -Dversion=0.0.1-SNAPSHOT -Dpackaging=jar -DgeneratePom=true
+                    cd ..
+
+                    pwd
+
+                    cd libs/oracle_driver
+                    mvn install:install-file -Dfile=ojdbc7-12.1.0.2.jar -DgroupId=com.oracle -DartifactId=ojdbc7 -Dversion=12.1.0.2 -Dpackaging=jar -DgeneratePom=true
+                    cd ../..
+
+                    pwd
+                    cd $subProjectPath
+                    mvn clean
+                    mvn install -X -Dmaven.test.skip=true
+
+					pwd
+                 '''
+                 stash includes: "${env.subProjectPath}/target/${env.jar}", name: 'targetfiles'
+            }
+        }
+
+        stage('Build Image') {
+            steps {
+                script {
+                    unstash 'targetfiles'
+                    sh "sed -i 's|jenkins-jar|${env.jar}|g' $WORKSPACE/$subProjectPath/deployment/resources/Dockerfile"
+                    sh "sed -i 's|jenkins-subProjectPath|${env.subProjectPath}|g' $WORKSPACE/$subProjectPath/deployment/resources/Dockerfile"
+                    a = docker.build("${env.registry}" + "/" + "${env.imageName}" + ":"+"${env.buildVersion}", "-f $subProjectPath/deployment/resources/Dockerfile .")
+                    a.push()
+                }
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                sshagent (credentials: ['sit-ssh-key-kube'])
+                {
+                    sh "sed -i 's|jenkins-namespace|$namespace|g' $WORKSPACE/$subProjectPath/deployment/resources/namespace.yaml"
+                    sh "sed -i 's|jenkins-namespace|$namespace|g' $WORKSPACE/$subProjectPath/deployment/resources/deployment.yaml"
+                    sh "sed -i 's|jenkins-deployment|$deployment|g' $WORKSPACE/$subProjectPath/deployment/resources/deployment.yaml"
+                    sh "sed -i 's|image-container|$registry/$imageName:$buildVersion|g' $WORKSPACE/$subProjectPath/deployment/resources/deployment.yaml"
+                    sh "sed -i 's|jenkins-namespace|$namespace|g' $WORKSPACE/$subProjectPath/deployment/resources/service.yaml"
+                    sh "sed -i 's|jenkins-deployment|$deployment|g' $WORKSPACE/$subProjectPath/deployment/resources/service.yaml"
+                    sh "sed -i 's|jenkins-service|$service|g' $WORKSPACE/$subProjectPath/deployment/resources/service.yaml"
+                    sh "sed -i 's|jenkins-port|$port|g' $WORKSPACE/$subProjectPath/deployment/resources/service.yaml"
+                    sh "sed -i 's|jenkins-node-port|$nodePort|g' $WORKSPACE/$subProjectPath/deployment/resources/service.yaml"
+                    sh '''
+                        ssh -o StrictHostKeyChecking=no $sshInfo mkdir -p $pathApp
+                        scp $WORKSPACE/$subProjectPath/deployment/resources/* $sshInfo:$pathApp
+                        scp $WORKSPACE/$subProjectPath/deployment/$buildEnv/config-map.yaml $sshInfo:$pathApp
+                        ssh -o StrictHostKeyChecking=no $sshInfo uname -a
+                        ssh -o StrictHostKeyChecking=no $sshInfo /usr/bin/kubectl apply -f $pathApp/namespace.yaml
+                        ssh -o StrictHostKeyChecking=no $sshInfo /usr/bin/kubectl apply -f $pathApp/config-map.yaml
+                        ssh -o StrictHostKeyChecking=no $sshInfo /usr/bin/kubectl apply -f $pathApp/deployment.yaml
+                        ssh -o StrictHostKeyChecking=no $sshInfo /usr/bin/kubectl apply -f $pathApp/service.yaml
+                    '''
+                }
+           	}
+        }
+    }
+}

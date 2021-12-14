@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: jenkins-deployment
+  name: jenkins-service
+  namespace: jenkins-namespace
+spec:
+  ports:
+    - nodePort: jenkins-node-port
+      port: jenkins-port
+      protocol: TCP
+      targetPort: jenkins-port
+  selector:
+    app: jenkins-deployment
+  type: NodePort
