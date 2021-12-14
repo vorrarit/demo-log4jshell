@@ -51,6 +51,30 @@ pipeline {
             }
         }
 
+        stage('Trivy Scan') {
+            agent {
+                docker {
+                    image 'aquasec/trivy'
+                    reuseNode true
+                }
+            }
+
+            steps {
+                sh '''
+                    trivy ${env.registry}/${env.imageName}:${env.buildVersion}
+                    my_exit_code=$?
+                    echo "RESULT 1:--- $my_exit_code"
+
+                    if [ ${my_exit_code} == 1]; then
+                        echo "Image scanning failed. Some vulnerabilities found"
+                        exit 1;
+                    else
+                        echo "Image is scanned Successfully. No vulnerabilities found"
+                    fi;
+                 '''
+            }
+        }
+
         stage('Deploy to Kubernetes') {
             steps {
                 sshagent (credentials: ['dev-ssh-key-kube'])
