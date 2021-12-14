@@ -53,20 +53,18 @@ pipeline {
 
         stage('Trivy Scan') {
             steps {
-                script {
-                    sh '''
-                        trivy --cache-dir /root/.trivy/trivy ${env.registry}/${env.imageName}:${env.buildVersion}
-                        my_exit_code=$?
-                        echo "RESULT 1:--- $my_exit_code"
+                sh '''
+                    trivy --cache-dir /root/.trivy/trivy ${env.registry}/${env.imageName}:${env.buildVersion}
+                    my_exit_code=$?
+                    echo "RESULT 1:--- $my_exit_code"
 
-                        if [ ${my_exit_code} == 1]; then
-                            echo "Image scanning failed. Some vulnerabilities found"
-                            exit 1;
-                        else
-                            echo "Image is scanned Successfully. No vulnerabilities found"
-                        fi;
-                     '''
-                 }
+                    if [ ${my_exit_code} == 1]; then
+                        echo "Image scanning failed. Some vulnerabilities found"
+                        exit 1;
+                    else
+                        echo "Image is scanned Successfully. No vulnerabilities found"
+                    fi;
+                 '''
             }
         }
 
