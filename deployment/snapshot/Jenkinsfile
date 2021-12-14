@@ -53,7 +53,7 @@ pipeline {
 
         stage('Trivy Scan') {
             steps {
-                sh '''
+                sh '''#!/bin/sh
                     trivy --cache-dir /root/.trivy/trivy ${env.registry}/${env.imageName}:${env.buildVersion}
                     my_exit_code=$?
                     echo "RESULT 1:--- $my_exit_code"
