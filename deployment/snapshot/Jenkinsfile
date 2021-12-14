@@ -53,8 +53,8 @@ pipeline {
 
         stage('Trivy Scan') {
             steps {
-                sh '''#!/bin/sh
-                    trivy --cache-dir /root/.trivy/trivy $registry/$imageName:$buildVersion
+                sh '''
+                    /usr/local/bin/trivy --cache-dir /root/.trivy/trivy $registry/$imageName:$buildVersion
                  '''
             }
         }
